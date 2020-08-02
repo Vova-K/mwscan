@@ -1,0 +1,94 @@
+[Version]
+Signature   = "$Windows NT$"
+Class       = "MalwareScanner"
+ClassGuid   = {1e0b7122-d81e-43dc-bea3-db0ef9609d97}
+Provider    = %ProviderString%
+DriverVer   = 2020,1.0.0.0
+CatalogFile = mscanner.cat
+
+
+[DestinationDirs]
+DefaultDestDir          = 12
+MwScan.DriverFiles      = 12            ;%windir%\system32\drivers
+;;MwScan.UserFiles        = 10,FltMgr     ;%windir%\FltMgr
+
+;;
+;; Default install sections
+;;
+
+[DefaultInstall]
+OptionDesc          = %ServiceDescription%
+CopyFiles           = MwScan.DriverFiles
+
+[DefaultInstall.Services]
+AddService          = %ServiceName%,,MwScan.Service
+
+;;
+;; Default uninstall sections
+;;
+
+[DefaultUninstall]
+DelFiles   = MwScan.DriverFiles
+
+[DefaultUninstall.Services]
+DelService = %ServiceName%,0x200      ;Ensure service is stopped before deleting
+
+;
+; Services Section
+;
+
+[MwScan.Service]
+DisplayName      = %ServiceName%
+Description      = %ServiceDescription%
+ServiceBinary    = %12%\%DriverName%.sys        ;%windir%\system32\drivers\
+Dependencies     = "FltMgr"
+ServiceType      = 2                            ;SERVICE_FILE_SYSTEM_DRIVER
+StartType        = 3                            ;SERVICE_DEMAND_START
+ErrorControl     = 1                            ;SERVICE_ERROR_NORMAL
+LoadOrderGroup   = "Malware Scanner"
+AddReg           = MwScan.AddRegistry
+
+;
+; Registry Modifications
+;
+
+[MwScan.AddRegistry]
+HKR,,"DebugFlags",0x00010001,0xc
+HKR,"Instances","DefaultInstance",0x00000000,%DefaultInstance%
+HKR,"Instances\"%Instance1.Name%,"Altitude",0x00000000,%Instance1.Altitude%
+HKR,"Instances\"%Instance1.Name%,"Flags",0x00010001,%Instance1.Flags%
+HKR,,"LocalScanTimeout",0x00010001,%LocalScanTimeout%
+HKR,,"NetworkScanTimeout",0x00010001,%NetworkScanTimeout%
+HKR,,"SupportedFeatures",0x00010001,0x3
+
+;
+; Copy Files
+;
+
+[MwScan.DriverFiles]
+%DriverName%.sys
+
+
+[SourceDisksFiles]
+mwscan.sys = 1,,
+
+[SourceDisksNames]
+1 = %DiskId1%,,,
+
+;;
+;; String Section
+;;
+
+[Strings]
+ProviderString          = "Test Provider"
+ServiceDescription      = "Mini-Filter Driver"
+ServiceName             = "mwscan"
+DriverName              = "mwscan"
+DiskId1                 = "Install Disk"
+LocalScanTimeout        = "30000"
+NetworkScanTimeout      = "60000"
+
+DefaultInstance         = "MwScan"
+Instance1.Name          = "MwScan"
+Instance1.Altitude      = "265010"
+Instance1.Flags         = 0x0              ; Allow all attachments
