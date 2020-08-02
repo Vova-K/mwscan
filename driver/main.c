@@ -517,7 +517,7 @@ FORCEINLINE VOID SetTransactionFinalState(_Inout_ PMW_STREAM_CONTEXT StreamConte
             break;
         }
     }
-	SetContextFlagModified(&(StreamContext->TxState));
+    SetContextFlagModified(&(StreamContext->TxState));
 }
 
 /*++
@@ -584,7 +584,7 @@ NTSTATUS PrepareScan(_Inout_ PFLT_CALLBACK_DATA Data, _In_ PCFLT_RELATED_OBJECTS
     if (NT_SUCCESS(status) && (0 == fileSize))
     {
         // As if we have 'scanned' this empty file.
-		SetContextFlagClean(&(StreamContext->FinalState));
+        SetContextFlagClean(&(StreamContext->FinalState));
         return STATUS_SUCCESS;
     }
 
@@ -856,8 +856,7 @@ Return Value:
 FLT_POSTOP_CALLBACK_STATUS FilterPostCreate(_Inout_ PFLT_CALLBACK_DATA Data, _In_ PCFLT_RELATED_OBJECTS FltObjects, _In_opt_ PVOID CompletionContext, _In_ FLT_POST_OPERATION_FLAGS Flags)
 
 {
-    NTSTATUS status = Data->IoStatus.Status;
-    BOOLEAN isDir = FALSE;
+    NTSTATUS status = STATUS_SUCCESS;
     BOOLEAN inTransaction = FALSE;
 
     PMW_STREAM_CONTEXT streamContext = NULL;
@@ -870,16 +869,21 @@ FLT_POSTOP_CALLBACK_STATUS FilterPostCreate(_Inout_ PFLT_CALLBACK_DATA Data, _In
 
     PAGED_CODE();
 
-    if (!NT_SUCCESS(status) || (status == STATUS_REPARSE))
     {
-        DbgPrint("File creation failed: 0x%x", status);
-        return FLT_POSTOP_FINISHED_PROCESSING;
+        NTSTATUS ioStatus = Data->IoStatus.Status;
+        if (!NT_SUCCESS(ioStatus) || (ioStatus == STATUS_REPARSE))
+        {
+            DbgPrint("File creation failed: 0x%x", ioStatus);
+            return FLT_POSTOP_FINISHED_PROCESSING;
+        }
     }
-
-    status = FltIsDirectory(FltObjects->FileObject, FltObjects->Instance, &isDir);
-    if (NT_SUCCESS(status) && isDir)
     {
-        return FLT_POSTOP_FINISHED_PROCESSING;
+        BOOLEAN isDir = FALSE;
+        status = FltIsDirectory(FltObjects->FileObject, FltObjects->Instance, &isDir);
+        if (NT_SUCCESS(status) && isDir)
+        {
+            return FLT_POSTOP_FINISHED_PROCESSING;
+        }
     }
     //  skip the encrypted files
     if (!(FlagOn(desiredAccess, FILE_WRITE_DATA)) && !(FlagOn(desiredAccess, FILE_READ_DATA)))
@@ -1012,7 +1016,7 @@ FLT_POSTOP_CALLBACK_STATUS FilterPostCreate(_Inout_ PFLT_CALLBACK_DATA Data, _In
             goto Cleanup;
         }
 
-		inTransaction = (FltObjects->Transaction != NULL);
+        inTransaction = (FltObjects->Transaction != NULL);
     }
 
     if (IsFileNeedScan(streamContext))
@@ -1032,16 +1036,16 @@ FLT_POSTOP_CALLBACK_STATUS FilterPostCreate(_Inout_ PFLT_CALLBACK_DATA Data, _In
 
     if (IsFileInfected(streamContext))
     {
-
-        //
-        //  If the file is infected, deny the access.
-        //
-        DoCancelFileOpen(Data, FltObjects, STATUS_VIRUS_INFECTED);
+        if (BLOCK_INFECTED)
+        {
+            //  If the file is infected, deny the access.
+            DoCancelFileOpen(Data, FltObjects, STATUS_VIRUS_INFECTED);
+        }
         //
         // TODO: If the scan timed-out or scan was failed, we let the create succeed, and it may cause security hole;
         goto Cleanup;
     }
-
+    //TODO: remove goto Cleanup
 Cleanup:
 
     FltReleaseContext(streamContext);

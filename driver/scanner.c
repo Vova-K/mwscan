@@ -1,6 +1,11 @@
 #include "utils.h"
 #include "context.h"
 #include "scanner.h"
+
+CHAR MW_SIGNATURE[] =
+#include "signature.txt"
+    ;
+
 //Local utils
 
 /*++
@@ -17,15 +22,15 @@ Return Value
 
 FILE_SCAN_RESULT DoScanMemoryStream(_In_reads_bytes_(Size) PVOID StartingAddress, _In_ SIZE_T Size, _In_ PBOOLEAN OperationCanceled)
 {
-    CHAR signature[] = SIGNATURE_TO_FIND;
-    UCHAR targetString[sizeof(signature)] = {0};
-    SIZE_T searchStringLength = sizeof(signature) - 1;
+    //CHAR signature[] = SIGNATURE_TO_FIND;
+    UCHAR targetString[sizeof(MW_SIGNATURE)] = {0};
+    SIZE_T searchStringLength = sizeof(MW_SIGNATURE) - 1;
     //ULONG ind;
     PUCHAR p;
     PUCHAR start = StartingAddress;
     PUCHAR end = start + Size - searchStringLength;
 
-    RtlCopyMemory((PVOID)targetString, SIGNATURE_TO_FIND, sizeof(signature));
+    RtlCopyMemory((PVOID)targetString, MW_SIGNATURE, sizeof(MW_SIGNATURE));
 
     DbgPrint("Scan memory: %p, %p, %llu ", start, end, Size);
 
@@ -149,13 +154,13 @@ NTSTATUS PerformScan(_In_ PCFLT_RELATED_OBJECTS FltObjects, _In_ UCHAR IOMajorFu
     switch (scanResult)
     {
     case ScanResultClean:
-		SetFileCleanEx(inTransaction, StreamContext);
+        SetFileCleanEx(inTransaction, StreamContext);
         break;
     case ScanResultDetected:
-		SetFileInfectedEx(inTransaction, StreamContext);
+        SetFileInfectedEx(inTransaction, StreamContext);
         break;
     default:
-		SetFileUnknownEx(inTransaction, StreamContext);
+        SetFileUnknownEx(inTransaction, StreamContext);
         break;
     }
     status = FinalizeSectionContext(sectionContext);
