@@ -20,5 +20,6 @@
 # Build artifacts
 driver/x64
 .vs
+x64
 *.db
 *.opendb

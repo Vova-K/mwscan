@@ -97,7 +97,7 @@ VOID InstanceContextCleanup(_In_ PFLT_CONTEXT Context, _In_ FLT_CONTEXT_TYPE Con
 
 FORCEINLINE PERESOURCE DoAllocateResource()
 {
-    return ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(ERESOURCE), MW_RESOURCE_TAG);
+    return (PERESOURCE)ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(ERESOURCE), MW_RESOURCE_TAG);
 }
 
 FORCEINLINE VOID DoFreeResource(_In_ PERESOURCE Resource)
@@ -107,7 +107,7 @@ FORCEINLINE VOID DoFreeResource(_In_ PERESOURCE Resource)
 
 FORCEINLINE PKEVENT DoAllocateKevent()
 {
-    return ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(KEVENT), MW_KEVENT_TAG);
+    return (PKEVENT)ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(KEVENT), MW_KEVENT_TAG);
 }
 
 FORCEINLINE VOID DoFreeKevent(_In_ PKEVENT Event)
@@ -395,43 +395,41 @@ NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_STRING Regi
 
     DbgPrint("starting %s", DRIVER_NAME);
 
-    try
+    do
     {
         status = FltRegisterFilter(DriverObject, &FilterRegistration, &Globals.Filter);
         if (!NT_SUCCESS(status))
         {
             DbgPrint("FltRegisterFilter failed: 0x%x", status);
-            leave;
+            break;
         }
 
         status = FltBuildDefaultSecurityDescriptor(&sd, FLT_PORT_ALL_ACCESS);
         if (!NT_SUCCESS(status))
         {
             DbgPrint("FltBuildDefaultSecurityDescriptor failed: 0x%x", status);
-            leave;
+            break;
         }
 
         status = FltStartFiltering(Globals.Filter);
         if (!NT_SUCCESS(status))
         {
             DbgPrint("FltStartFiltering failed: 0x%x", status);
-            leave;
+            break;
         }
-    }
-    finally
+	}
+	while (0);
+    if (sd != NULL)
     {
-        if (sd != NULL)
-        {
-            FltFreeSecurityDescriptor(sd);
-        }
+        FltFreeSecurityDescriptor(sd);
+    }
 
-        if (!NT_SUCCESS(status))
+    if (!NT_SUCCESS(status))
+    {
+        if (NULL != Globals.Filter)
         {
-            if (NULL != Globals.Filter)
-            {
-                FltUnregisterFilter(Globals.Filter);
-                Globals.Filter = NULL;
-            }
+            FltUnregisterFilter(Globals.Filter);
+            Globals.Filter = NULL;
         }
     }
     return status;
