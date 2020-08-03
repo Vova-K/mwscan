@@ -291,7 +291,7 @@ NTSTATUS DoInstanceSetup(_In_ PCFLT_RELATED_OBJECTS FltObjects, _In_ FLT_INSTANC
         }
     }
 
-    status = FltAllocateContext(Globals.Filter, FLT_INSTANCE_CONTEXT, sizeof(MW_INSTANCE_CONTEXT), NonPagedPoolNx, &instanceContext);
+    status = FltAllocateContext(Globals.Filter, FLT_INSTANCE_CONTEXT, sizeof(MW_INSTANCE_CONTEXT), NonPagedPoolNx, (PFLT_CONTEXT*)&instanceContext);
     if (!NT_SUCCESS(status))
     {
         DbgPrint("failed to allocate instance context: 0x%x", status);
@@ -351,7 +351,7 @@ VOID DoInstanceTeardownStart(_In_ PCFLT_RELATED_OBJECTS FltObjects, _Unreference
 
     UNREFERENCED_PARAMETER(Flags);
     PAGED_CODE();
-    status = FltGetInstanceContext(FltObjects->Instance, &instanceContext);
+    status = FltGetInstanceContext(FltObjects->Instance, (PFLT_CONTEXT*)&instanceContext);
     if (!NT_SUCCESS(status))
     {
         DbgPrint("FltGetInstanceContext failed: 0x%x", status);
@@ -502,7 +502,7 @@ FORCEINLINE VOID SetTransactionFinalState(_Inout_ PMW_STREAM_CONTEXT StreamConte
 {
     if (TransactionReslut == TransactionOutcomeCommitted)
     {
-        MW_INFECTED_STATE oldTxState = InterlockedExchange(&StreamContext->TxState, InfectedStateModified);
+        MW_INFECTED_STATE oldTxState = (MW_INFECTED_STATE)InterlockedExchange(&StreamContext->TxState, InfectedStateModified);
         switch (oldTxState)
         {
         case InfectedStateModified:
@@ -544,7 +544,7 @@ NTSTATUS ProcessTransactionResult(_Inout_ PMW_TRANSACTION TransactionContext, _I
     {
 
         streamContext = CONTAINING_RECORD(scan, MW_STREAM_CONTEXT, ListInTransaction);
-        oldTxCtx = InterlockedCompareExchangePointer(&streamContext->TransactionContext, NULL, TransactionContext);
+        oldTxCtx = (PMW_TRANSACTION)InterlockedCompareExchangePointer((volatile PVOID*)&streamContext->TransactionContext, NULL, TransactionContext);
         if (oldTxCtx == TransactionContext)
         {
             RemoveEntryList(scan);
@@ -692,8 +692,8 @@ FLT_PREOP_CALLBACK_STATUS FilterPreCreate(_Inout_ PFLT_CALLBACK_DATA Data, _In_ 
     {
         SetFlag(streamHandleContext.Flags, MW_PREFETCH);
     }
-    //TODO: check if it is safe to use local stack variable for post-create callback???
-    *CompletionContext = (PVOID)streamHandleContext.Flags;
+    //
+    *CompletionContext = (PVOID)(UINT_PTR)streamHandleContext.Flags;
     status = CheckForCsvfs(Data, FltObjects);
     if (!NT_SUCCESS(status))
     {
@@ -769,7 +769,7 @@ NTSTATUS ProcessTransactions(_In_ PCFLT_RELATED_OBJECTS FltObjects, _Inout_ PMW_
     //    transCtx : NULL
     //
 
-    oldTxCtx = InterlockedExchangePointer(&StreamContext->TransactionContext, transactionContext);
+    oldTxCtx = (PMW_TRANSACTION)InterlockedExchangePointer((volatile PVOID*)&StreamContext->TransactionContext, transactionContext);
     // case 1,2,3
     if (oldTxCtx != transactionContext)
     {
@@ -933,7 +933,7 @@ FLT_POSTOP_CALLBACK_STATUS FilterPostCreate(_Inout_ PFLT_CALLBACK_DATA Data, _In
     //  Find or create a stream context
     //
 
-    status = FltGetStreamContext(FltObjects->Instance, FltObjects->FileObject, &streamContext);
+    status = FltGetStreamContext(FltObjects->Instance, FltObjects->FileObject, (PFLT_CONTEXT*)&streamContext);
     if (status == STATUS_NOT_FOUND)
     {
         status = CreateFileStreamContext(FltObjects->Filter, &streamContext);
@@ -957,7 +957,7 @@ FLT_POSTOP_CALLBACK_STATUS FilterPostCreate(_Inout_ PFLT_CALLBACK_DATA Data, _In
                                      FltObjects->FileObject,
                                      FLT_SET_CONTEXT_KEEP_IF_EXISTS,
                                      streamContext,
-                                     &oldStreamContext);
+                                     (PFLT_CONTEXT *)&oldStreamContext);
 
         if (!NT_SUCCESS(status))
         {
@@ -1074,9 +1074,9 @@ NTSTATUS TrNotificationCallback(_Unreferenced_parameter_ PCFLT_RELATED_OBJECTS F
     {
         if (FlagOn(TransactionNotification, TRANSACTION_NOTIFY_COMMIT_FINALIZE))
         {
-            return ProcessTransactionResult(TransactionContext, TransactionOutcomeCommitted);
+            return ProcessTransactionResult(transactionContext, TransactionOutcomeCommitted);
         }
-        return ProcessTransactionResult(TransactionContext, TransactionOutcomeAborted);
+        return ProcessTransactionResult(transactionContext, TransactionOutcomeAborted);
     }
 
     return STATUS_SUCCESS;
@@ -1264,7 +1264,7 @@ NTSTATUS CheckForCsvfs(_Inout_ PFLT_CALLBACK_DATA Data, _In_ PCFLT_RELATED_OBJEC
     UNREFERENCED_PARAMETER(Data);
     PAGED_CODE();
 
-    status = FltGetInstanceContext(FltObjects->Instance, &instanceContext);
+    status = FltGetInstanceContext(FltObjects->Instance, (PFLT_CONTEXT*)&instanceContext);
     if (!NT_SUCCESS(status))
     {
         DbgPrint("FltGetInstanceContext failed %x", status);
@@ -1344,7 +1344,7 @@ NTSTATUS GetTransactionContext(_In_ PCFLT_RELATED_OBJECTS FltObjects, _Outptr_ P
     PERESOURCE pResource = NULL;
 
     PAGED_CODE();
-    status = FltGetTransactionContext(FltObjects->Instance, FltObjects->Transaction, &transactionContext);
+    status = FltGetTransactionContext(FltObjects->Instance, FltObjects->Transaction, (PFLT_CONTEXT*)&transactionContext);
     if (NT_SUCCESS(status))
     {
         *TransactionContext = transactionContext;
@@ -1365,7 +1365,7 @@ NTSTATUS GetTransactionContext(_In_ PCFLT_RELATED_OBJECTS FltObjects, _Outptr_ P
     }
 
     //  Allocate a transaction context.
-    status = FltAllocateContext(Globals.Filter, FLT_TRANSACTION_CONTEXT, sizeof(MW_TRANSACTION), PagedPool, &transactionContext);
+    status = FltAllocateContext(Globals.Filter, FLT_TRANSACTION_CONTEXT, sizeof(MW_TRANSACTION), PagedPool, (PFLT_CONTEXT*)&transactionContext);
     if (!NT_SUCCESS(status))
     {
         DbgPrint("Failed to  allocate transaction context: 0x%x", status);
@@ -1384,7 +1384,7 @@ NTSTATUS GetTransactionContext(_In_ PCFLT_RELATED_OBJECTS FltObjects, _Outptr_ P
     transactionContext->Transaction = FltObjects->Transaction;
     InitializeListHead(&transactionContext->ScListHead);
     ExInitializeResourceLite(transactionContext->Resource);
-    status = FltSetTransactionContext(FltObjects->Instance, FltObjects->Transaction, FLT_SET_CONTEXT_KEEP_IF_EXISTS, transactionContext, &oldTransactionContext);
+    status = FltSetTransactionContext(FltObjects->Instance, FltObjects->Transaction, FLT_SET_CONTEXT_KEEP_IF_EXISTS, transactionContext, (PFLT_CONTEXT*)&oldTransactionContext);
 
     if (NT_SUCCESS(status))
     {
@@ -1429,7 +1429,7 @@ NTSTATUS CreateFileStreamContext(_In_ PFLT_FILTER Filter, _Outptr_ PMW_STREAM_CO
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    status = FltAllocateContext(Filter, FLT_STREAM_CONTEXT, sizeof(MW_STREAM_CONTEXT), PagedPool, &streamContext);
+    status = FltAllocateContext(Filter, FLT_STREAM_CONTEXT, sizeof(MW_STREAM_CONTEXT), PagedPool, (PFLT_CONTEXT*)&streamContext);
     if (!NT_SUCCESS(status))
     {
         DbgPrint("Failed to allocate stream context: 0x%x", status);
@@ -1458,7 +1458,7 @@ NTSTATUS CreateStreamHandleContext(_In_ PFLT_FILTER Filter, _Outptr_ PMW_STREAMH
     PMW_STREAMHANDLE streamHandleContext = NULL;
 
     PAGED_CODE();
-    status = FltAllocateContext(Filter, FLT_STREAMHANDLE_CONTEXT, sizeof(MW_STREAMHANDLE), PagedPool, &streamHandleContext);
+    status = FltAllocateContext(Filter, FLT_STREAMHANDLE_CONTEXT, sizeof(MW_STREAMHANDLE), PagedPool, (PFLT_CONTEXT*)&streamHandleContext);
     if (!NT_SUCCESS(status))
     {
         DbgPrint("Failed to allocate stream handle context: 0x%x", status);
